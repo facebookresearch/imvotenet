@@ -1,4 +1,4 @@
-# ImVoteNet
+# ImVoteNet: Boosting 3D Object Detection in Point Clouds with Image Votes
 
 ## Installation
 Overall, the installation is similar to [VoteNet](https://github.com/facebookresearch/votenet). GPU is required. The code is tested with Ubuntu 18.04, Python 3.7.7, PyTorch 1.4.0, CUDA 10.0 and cuDNN v7.4.
@@ -32,12 +32,11 @@ Please follow the steps listed [here](https://github.com/facebookresearch/votene
 ```
 sunrgbd/
   sunrgbd_pc_bbox_votes_50k_v1_train/
-    # *_bbox.npy (boxes)
-    # *_pc.npz (point clouds)
-    # *_votes.npz (point votes)
+    # *_{bbox.npy, pc.npz, votes.npz}
   sunrgbd_pc_bbox_votes_50k_v1_val/
     # similar to above
   sunrgbd_trainval/
+    # raw image data and camera 
     calib/*.txt
     image/*.jpg
 ```
