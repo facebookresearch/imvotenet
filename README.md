@@ -1,5 +1,5 @@
 # ImVoteNet
-## Boosting 3D Object Detection in Point Clouds with Image Votes
+**Boosting 3D Object Detection in Point Clouds with Image Votes**
 
 This is code release of the [paper](https://arxiv.org/abs/2001.10692):
 ```
