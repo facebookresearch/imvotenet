@@ -31,16 +31,12 @@ cd ..
 Please follow the steps listed [here](https://github.com/facebookresearch/votenet/blob/master/sunrgbd/README.md) to set up the SUN RGB-D dataset in the `sunrgbd` folder. The expected dataset structure under `sunrgbd` should be:
 ```
 sunrgbd/
-  sunrgbd_pc_bbox_votes_50k_v1_train/
-    # *_{bbox.npy, pc.npz, votes.npz}
-  sunrgbd_pc_bbox_votes_50k_v1_val/
-    # similar to above
+  sunrgbd_pc_bbox_votes_50k_v1_{train,val}/
   sunrgbd_trainval/
-    # raw image data and camera 
+    # raw image data and camera used by ImVoteNet
     calib/*.txt
     image/*.jpg
 ```
-
 
 ## Training and Evaluation
 
