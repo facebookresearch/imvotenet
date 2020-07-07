@@ -38,37 +38,9 @@ DC = SunrgbdDatasetConfig() # dataset specific config
 MAX_NUM_OBJ = 64 # maximum number of objects allowed per scene
 MEAN_COLOR_RGB = np.array([0.5,0.5,0.5]) # sunrgbd color is in 0~1
 
-MAX_NUM_VOTE_PER_PIXEL = 3 # maximum number of unique image votes per pixel
-DEFAULT_TYPE_WHITELIST = ['bed','table','sofa','chair','toilet','desk','dresser','night_stand','bookshelf','bathtub'] # sunrgbd class labels
-NUM_CLS = len(DEFAULT_TYPE_WHITELIST) # sunrgbd number of classes
+NUM_CLS = 10 # sunrgbd number of classes
 MAX_NUM_2D_DET = 100 # maximum number of 2d boxes per image
 MAX_NUM_PIXEL = 530*730 # maximum number of pixels per image
-
-def read_2d_bbox_folder(det_folder, prob_thresh=0.5):
-    """
-    Returns:
-        type_map: map from img_id to a list of strings as object type
-        prob_map: map from img_id to a list of floats as confidence scores
-        box2d_map: map from img_id to a list of numpy array (4-dim obj xmin,ymin,xmax,ymax)
-    """   
-    filenames = sorted(os.listdir(det_folder))
-    type_map = {}
-    prob_map = {}
-    box2d_map = {}
-    for filename in filenames:
-        img_id = int(filename[0:6])
-        type_map[img_id] = []
-        prob_map[img_id] = []
-        box2d_map[img_id] = []
-        full_filename = os.path.join(det_folder, filename)
-        for line in open(full_filename, 'r'):
-            t = line.rstrip().split(" ")
-            prob = float(t[-1])
-            if prob < prob_thresh: continue
-            type_map[img_id].append(t[0])
-            prob_map[img_id].append(prob)
-            box2d_map[img_id].append(np.array([float(t[i]) for i in range(4,8)]).astype(np.int32))
-    return type_map, box2d_map, prob_map
 
 
 class SunrgbdDetectionVotesDataset(Dataset):
@@ -78,6 +50,7 @@ class SunrgbdDetectionVotesDataset(Dataset):
                  use_color=False,
                  use_height=False,
                  use_imvote=False,
+                 max_imvote_per_pixel=3,
                  use_v1=True,
                  augment=False,
                  scan_idx_list=None):
@@ -106,7 +79,10 @@ class SunrgbdDetectionVotesDataset(Dataset):
         self.use_color = use_color
         self.use_height = use_height
         self.use_imvote = use_imvote
-        self.vote_dims = 1+MAX_NUM_VOTE_PER_PIXEL*4 
+        self.max_imvote_per_pixel = max_imvote_per_pixel
+        self.vote_dims = 1+self.max_imvote_per_pixel*4
+        # Total feature dimensions: geometric(5)+semantic(NUM_CLS)+texture(3) 
+        self.image_feature_dim = NUM_CLS+8
        
     def __len__(self):
         return len(self.scan_names)
@@ -191,7 +167,7 @@ class SunrgbdDetectionVotesDataset(Dataset):
                 for u in range(u0, u0+w):
                     for v in range(v0, v0+h):
                         iidx = int(full_img_votes[v,u,0])
-                        if iidx >= MAX_NUM_VOTE_PER_PIXEL: 
+                        if iidx >= self.max_imvote_per_pixel: 
                             continue
                         full_img_votes[v,u,(1+iidx*4):(1+iidx*4+2)] = img_vote[v-v0,u-u0,:]
                         full_img_votes[v,u,(1+iidx*4+2)] = cls2d
@@ -203,6 +179,7 @@ class SunrgbdDetectionVotesDataset(Dataset):
 
             # Semantic cues: one-hot vector for class scores
             cls_score_feats = np.zeros((1+MAX_NUM_2D_DET,NUM_CLS), dtype=np.float32)
+            # First row is dumpy feature
             ind_obj = np.arange(1,len(cls_id_list)+1)
             ind_cls = np.array(cls_id_list)
             cls_score_feats[ind_obj, ind_cls] = np.array(cls_score_list)
@@ -351,7 +328,6 @@ class SunrgbdDetectionVotesDataset(Dataset):
             ret_dict['scale_ratio'] = np.array(scale_ratio).astype(np.float32)
             ret_dict['calib_Rtilt'] = calib_Rtilt.astype(np.float32)
             ret_dict['calib_K'] = calib_K.astype(np.float32)
-            ret_dict['full_img_height'] = np.array(full_img_height).astype(np.int64)
             ret_dict['full_img_width'] = np.array(full_img_width).astype(np.int64)
             ret_dict['cls_score_feats'] = cls_score_feats.astype(np.float32)
             ret_dict['full_img_votes_1d'] = full_img_votes_1d.astype(np.float32)

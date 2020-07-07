@@ -47,3 +47,7 @@ sunrgbd/
 
 ## Training and Evaluation
 
+## TODO
+1. Check the intermediate dimension of `VotingModule` (whether fixed 256, or change as input dimension changes)
+2. Learning rate schedule, check the 140/180/200 epoch schedules
+3. Add docs for some functions

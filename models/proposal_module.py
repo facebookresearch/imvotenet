@@ -15,37 +15,37 @@ sys.path.append(os.path.join(ROOT_DIR, 'pointnet2'))
 from pointnet2_modules import PointnetSAModuleVotes
 import pointnet2_utils
 
-def decode_scores(net, end_points, num_class, num_heading_bin, num_size_cluster, mean_size_arr):
+def decode_scores(net, end_points, num_class, num_heading_bin, num_size_cluster, mean_size_arr, key_prefix):
     net_transposed = net.transpose(2,1) # (batch_size, 1024, ..)
     batch_size = net_transposed.shape[0]
     num_proposal = net_transposed.shape[1]
 
     objectness_scores = net_transposed[:,:,0:2]
-    end_points['objectness_scores'] = objectness_scores
+    end_points[key_prefix+'objectness_scores'] = objectness_scores
     
-    base_xyz = end_points['aggregated_vote_xyz'] # (batch_size, num_proposal, 3)
+    base_xyz = end_points[key_prefix+'aggregated_vote_xyz'] # (batch_size, num_proposal, 3)
     center = base_xyz + net_transposed[:,:,2:5] # (batch_size, num_proposal, 3)
-    end_points['center'] = center
+    end_points[key_prefix+'center'] = center
 
     heading_scores = net_transposed[:,:,5:5+num_heading_bin]
     heading_residuals_normalized = net_transposed[:,:,5+num_heading_bin:5+num_heading_bin*2]
-    end_points['heading_scores'] = heading_scores # Bxnum_proposalxnum_heading_bin
-    end_points['heading_residuals_normalized'] = heading_residuals_normalized # Bxnum_proposalxnum_heading_bin (should be -1 to 1)
-    end_points['heading_residuals'] = heading_residuals_normalized * (np.pi/num_heading_bin) # Bxnum_proposalxnum_heading_bin
+    end_points[key_prefix+'heading_scores'] = heading_scores # Bxnum_proposalxnum_heading_bin
+    end_points[key_prefix+'heading_residuals_normalized'] = heading_residuals_normalized # Bxnum_proposalxnum_heading_bin (should be -1 to 1)
+    end_points[key_prefix+'heading_residuals'] = heading_residuals_normalized * (np.pi/num_heading_bin) # Bxnum_proposalxnum_heading_bin
 
     size_scores = net_transposed[:,:,5+num_heading_bin*2:5+num_heading_bin*2+num_size_cluster]
     size_residuals_normalized = net_transposed[:,:,5+num_heading_bin*2+num_size_cluster:5+num_heading_bin*2+num_size_cluster*4].view([batch_size, num_proposal, num_size_cluster, 3]) # Bxnum_proposalxnum_size_clusterx3
-    end_points['size_scores'] = size_scores
-    end_points['size_residuals_normalized'] = size_residuals_normalized
-    end_points['size_residuals'] = size_residuals_normalized * torch.from_numpy(mean_size_arr.astype(np.float32)).cuda().unsqueeze(0).unsqueeze(0)
+    end_points[key_prefix+'size_scores'] = size_scores
+    end_points[key_prefix+'size_residuals_normalized'] = size_residuals_normalized
+    end_points[key_prefix+'size_residuals'] = size_residuals_normalized * torch.from_numpy(mean_size_arr.astype(np.float32)).cuda().unsqueeze(0).unsqueeze(0)
 
     sem_cls_scores = net_transposed[:,:,5+num_heading_bin*2+num_size_cluster*4:] # Bxnum_proposalx10
-    end_points['sem_cls_scores'] = sem_cls_scores
+    end_points[key_prefix+'sem_cls_scores'] = sem_cls_scores
     return end_points
 
 
 class ProposalModule(nn.Module):
-    def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, num_proposal, sampling, seed_feat_dim=256):
+    def __init__(self, num_class, num_heading_bin, num_size_cluster, mean_size_arr, num_proposal, sampling, seed_feat_dim=256, key_prefix='pc_only_'):
         super().__init__() 
 
         self.num_class = num_class
@@ -55,6 +55,7 @@ class ProposalModule(nn.Module):
         self.num_proposal = num_proposal
         self.sampling = sampling
         self.seed_feat_dim = seed_feat_dim
+        self.key_prefix = key_prefix
 
         # Vote clustering
         self.vote_aggregation = PointnetSAModuleVotes( 
@@ -101,15 +102,15 @@ class ProposalModule(nn.Module):
         else:
             log_string('Unknown sampling strategy: %s. Exiting!'%(self.sampling))
             exit()
-        end_points['aggregated_vote_xyz'] = xyz # (batch_size, num_proposal, 3)
-        end_points['aggregated_vote_inds'] = sample_inds # (batch_size, num_proposal,) # should be 0,1,2,...,num_proposal
+        end_points[self.key_prefix+'aggregated_vote_xyz'] = xyz # (batch_size, num_proposal, 3)
+        end_points[self.key_prefix+'aggregated_vote_inds'] = sample_inds # (batch_size, num_proposal,) # should be 0,1,2,...,num_proposal
 
         # --------- PROPOSAL GENERATION ---------
         net = F.relu(self.bn1(self.conv1(features))) 
         net = F.relu(self.bn2(self.conv2(net))) 
         net = self.conv3(net) # (batch_size, 2+3+num_heading_bin*2+num_size_cluster*4, num_proposal)
 
-        end_points = decode_scores(net, end_points, self.num_class, self.num_heading_bin, self.num_size_cluster, self.mean_size_arr)
+        end_points = decode_scores(net, end_points, self.num_class, self.num_heading_bin, self.num_size_cluster, self.mean_size_arr, self.key_prefix)
         return end_points
 
 if __name__=='__main__':
