@@ -24,6 +24,7 @@ Date: 2020
 import os
 import sys
 import numpy as np
+import tqdm
 from torch.utils.data import Dataset
 import scipy.io as sio # to load .mat files for depth points
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -83,6 +84,30 @@ class SunrgbdDetectionVotesDataset(Dataset):
         self.vote_dims = 1+self.max_imvote_per_pixel*4
         # Total feature dimensions: geometric(5)+semantic(NUM_CLS)+texture(3) 
         self.image_feature_dim = NUM_CLS+8
+        self.pre_load_2d_bboxes()
+
+    def pre_load_2d_bboxes(self):
+        self.cls_id_map = {}
+        self.cls_score_map = {}
+        self.bbox_2d_map = {}
+        print("pre-loading 2d boxes from: " + self.bbox_2d_path)
+        for scan_name in tqdm.tqdm(self.scan_names):
+            # Read 2D object detection boxes and scores
+            cls_id_list = []
+            cls_score_list = []
+            bbox_2d_list = []
+            for line in open(os.path.join(self.bbox_2d_path, scan_name+'.txt'), 'r'):
+                det_info = line.rstrip().split(" ")
+                prob = float(det_info[-1])
+                # Filter out low-confidence 2D detections
+                if prob < 0.1:
+                    continue
+                cls_id_list.append(sunrgbd_utils.type2class[det_info[0]])
+                cls_score_list.append(prob)
+                bbox_2d_list.append(np.array([float(det_info[i]) for i in range(4,8)]).astype(np.int32))
+            self.cls_id_map[scan_name] = cls_id_list
+            self.cls_score_map[scan_name] = cls_score_list
+            self.bbox_2d_map[scan_name] = bbox_2d_list
        
     def __len__(self):
         return len(self.scan_names)
@@ -118,20 +143,11 @@ class SunrgbdDetectionVotesDataset(Dataset):
             full_img = sunrgbd_utils.load_image(os.path.join(self.raw_data_path, 'image', scan_name+'.jpg'))
             full_img_height = full_img.shape[0]
             full_img_width = full_img.shape[1]
-            # Read 2D object detection boxes and scores
-            cls_id_list = []
-            cls_score_list = []
-            bbox_2d_list = []
-            for line in open(os.path.join(self.bbox_2d_path, scan_name+'.txt'), 'r'):
-                det_info = line.rstrip().split(" ")
-                prob = float(det_info[-1])
-                # Filter out low-confidence 2D detections
-                if prob < 0.1:
-                    continue
-                cls_id_list.append(sunrgbd_utils.type2class[det_info[0]])
-                cls_score_list.append(prob)
-                bbox_2d_list.append(np.array([float(det_info[i]) for i in range(4,8)]).astype(np.int32))
+            
             # ------------------------------- 2D IMAGE VOTES ------------------------------
+            cls_id_list = self.cls_id_map[scan_name]
+            cls_score_list = self.cls_score_map[scan_name]
+            bbox_2d_list = self.bbox_2d_map[scan_name]
             obj_img_list = []
             for i2d, (cls2d, box2d) in enumerate(zip(cls_id_list, bbox_2d_list)):
                 xmin, ymin, xmax, ymax = box2d
@@ -204,6 +220,7 @@ class SunrgbdDetectionVotesDataset(Dataset):
             point_cloud = np.concatenate([point_cloud, np.expand_dims(height, 1)],1) # (N,4) or (N,7)
 
         # ------------------------------- DATA AUGMENTATION ------------------------------
+        scale_ratio = 1.
         if self.augment:
             flip_flag = (np.random.random()>0.5)
             if flip_flag:

@@ -20,7 +20,7 @@ conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
 ```
 Next, install Python dependencies via `pip` ([tensorboardX](https://github.com/lanpa/tensorboardX) is used for for visualizations):
 ```bash
-pip install matplotlib opencv-python plyfile networkx==2.2 trimesh==2.35.39 tensorboardX
+pip install matplotlib opencv-python plyfile tensorboardX tqdm networkx==2.2 trimesh==2.35.39
 ```
 Now we are ready to clone this repository:
 ```bash

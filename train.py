@@ -305,8 +305,8 @@ def evaluate_one_epoch():
 
         # Compute loss
         for key in batch_data_label:
-            assert(key not in end_points)
-            end_points[key] = batch_data_label[key]
+            if key not in end_points:
+                end_points[key] = batch_data_label[key]
         loss, end_points = criterion(end_points, DATASET_CONFIG, KEY_PREFIX_LIST, TOWER_WEIGHTS)
 
         # Accumulate statistics and print out
