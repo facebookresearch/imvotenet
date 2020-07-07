@@ -4,7 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-""" Dataset for 3D object detection on SUN RGB-D (with support of vote supervision).
+""" Dataset for 3D object detection on SUN RGB-D (with additional support for ImVoteNet).
 
 A sunrgbd oriented bounding box is parameterized by (cx,cy,cz), (l,w,h) -- (dx,dy,dz) in upright depth coord
 (Z is up, Y is forward, X is right ward), heading angle (from +X rotating to -Y) and semantic class
@@ -17,7 +17,8 @@ Oriented bounding box is parameterized by (cx,cy,cz), (l,w,h), heading_angle and
 The heading angle is a rotation rad from +X rotating towards -Y. (+X is 0, -Y is pi/2)
 
 Author: Charles R. Qi
-Date: 2019
+Modified by: Xinlei Chen
+Date: 2020
 
 """
 import os
@@ -37,19 +38,63 @@ DC = SunrgbdDatasetConfig() # dataset specific config
 MAX_NUM_OBJ = 64 # maximum number of objects allowed per scene
 MEAN_COLOR_RGB = np.array([0.5,0.5,0.5]) # sunrgbd color is in 0~1
 
+MAX_NUM_VOTE_PER_PIXEL = 3 # maximum number of unique image votes per pixel
+DEFAULT_TYPE_WHITELIST = ['bed','table','sofa','chair','toilet','desk','dresser','night_stand','bookshelf','bathtub'] # sunrgbd class labels
+NUM_CLS = len(DEFAULT_TYPE_WHITELIST) # sunrgbd number of classes
+MAX_NUM_2D_DET = 100 # maximum number of 2d boxes per image
+MAX_NUM_PIXEL = 530*730 # maximum number of pixels per image
+
+def read_2d_bbox_folder(det_folder, prob_thresh=0.5):
+    """
+    Returns:
+        type_map: map from img_id to a list of strings as object type
+        prob_map: map from img_id to a list of floats as confidence scores
+        box2d_map: map from img_id to a list of numpy array (4-dim obj xmin,ymin,xmax,ymax)
+    """   
+    filenames = sorted(os.listdir(det_folder))
+    type_map = {}
+    prob_map = {}
+    box2d_map = {}
+    for filename in filenames:
+        img_id = int(filename[0:6])
+        type_map[img_id] = []
+        prob_map[img_id] = []
+        box2d_map[img_id] = []
+        full_filename = os.path.join(det_folder, filename)
+        for line in open(full_filename, 'r'):
+            t = line.rstrip().split(" ")
+            prob = float(t[-1])
+            if prob < prob_thresh: continue
+            type_map[img_id].append(t[0])
+            prob_map[img_id].append(prob)
+            box2d_map[img_id].append(np.array([float(t[i]) for i in range(4,8)]).astype(np.int32))
+    return type_map, box2d_map, prob_map
+
+
 class SunrgbdDetectionVotesDataset(Dataset):
-    def __init__(self, split_set='train', num_points=20000,
-        use_color=False, use_height=False, use_v1=False,
-        augment=False, scan_idx_list=None):
+    def __init__(self, 
+                 split_set='train',
+                 num_points=20000,
+                 use_color=False,
+                 use_height=False,
+                 use_imvote=False,
+                 use_v1=True,
+                 augment=False,
+                 scan_idx_list=None):
 
         assert(num_points<=50000)
-        self.use_v1 = use_v1 
+        self.use_v1 = use_v1
+        self.train = split_set == 'train'
         if use_v1:
             self.data_path = os.path.join(ROOT_DIR,
                 'sunrgbd/sunrgbd_pc_bbox_votes_50k_v1_%s'%(split_set))
+            self.bbox_2d_path = os.path.join(ROOT_DIR,
+                'sunrgbd/sunrgbd_2d_bbox_50k_v1_%s'%(split_set))
         else:
             self.data_path = os.path.join(ROOT_DIR,
                 'sunrgbd/sunrgbd_pc_bbox_votes_50k_v2_%s'%(split_set))
+            self.bbox_2d_path = os.path.join(ROOT_DIR,
+                'sunrgbd/sunrgbd_2d_bbox_50k_v2_%s'%(split_set))
 
         self.raw_data_path = os.path.join(ROOT_DIR, 'sunrgbd/sunrgbd_trainval')
         self.scan_names = sorted(list(set([os.path.basename(x)[0:6] \
@@ -60,6 +105,8 @@ class SunrgbdDetectionVotesDataset(Dataset):
         self.augment = augment
         self.use_color = use_color
         self.use_height = use_height
+        self.use_imvote = use_imvote
+        self.vote_dims = 1+MAX_NUM_VOTE_PER_PIXEL*4 
        
     def __len__(self):
         return len(self.scan_names)
@@ -86,6 +133,86 @@ class SunrgbdDetectionVotesDataset(Dataset):
         point_cloud = np.load(os.path.join(self.data_path, scan_name)+'_pc.npz')['pc'] # Nx6
         bboxes = np.load(os.path.join(self.data_path, scan_name)+'_bbox.npy') # K,8
         point_votes = np.load(os.path.join(self.data_path, scan_name)+'_votes.npz')['point_votes'] # Nx10
+        if self.use_imvote:
+            # Read camera parameters
+            calib_lines = [line for line in open(os.path.join(self.raw_data_path, 'calib', scan_name+'.txt')).readlines()]
+            calib_Rtilt = np.reshape(np.array([float(x) for x in calib_lines[0].rstrip().split(' ')]), (3,3), 'F')
+            calib_K = np.reshape(np.array([float(x) for x in calib_lines[1].rstrip().split(' ')]), (3,3), 'F')
+            # Read image
+            full_img = sunrgbd_utils.load_image(os.path.join(self.raw_data_path, 'image', scan_name+'.jpg'))
+            full_img_height = full_img.shape[0]
+            full_img_width = full_img.shape[1]
+            # Read 2D object detection boxes and scores
+            cls_id_list = []
+            cls_score_list = []
+            bbox_2d_list = []
+            for line in open(os.path.join(self.bbox_2d_path, scan_name+'.txt'), 'r'):
+                det_info = line.rstrip().split(" ")
+                prob = float(det_info[-1])
+                # Filter out low-confidence 2D detections
+                if prob < 0.1:
+                    continue
+                cls_id_list.append(sunrgbd_utils.type2class[det_info[0]])
+                cls_score_list.append(prob)
+                bbox_2d_list.append(np.array([float(det_info[i]) for i in range(4,8)]).astype(np.int32))
+            # ------------------------------- 2D IMAGE VOTES ------------------------------
+            obj_img_list = []
+            for i2d, (cls2d, box2d) in enumerate(zip(cls_id_list, bbox_2d_list)):
+                xmin, ymin, xmax, ymax = box2d
+                # During training we randomly drop 2D boxes to reduce over-fitting
+                if self.train and np.random.random()>0.5:
+                    continue
+
+                obj_img = full_img[ymin:ymax, xmin:xmax, :]
+                obj_h = obj_img.shape[0]
+                obj_w = obj_img.shape[1]
+                # Bounding box coordinates (4 values), class id, index to the semantic cues
+                meta_data = (xmin, ymin, obj_h, obj_w, cls2d, i2d)
+                if obj_h == 0 or obj_w == 0:
+                    continue
+
+                # Use 2D box center as approximation
+                uv_centroid = np.array([int(obj_w/2), int(obj_h/2)])
+                uv_centroid = np.expand_dims(uv_centroid, 0)
+
+                v_coords, u_coords = np.meshgrid(range(obj_h), range(obj_w), indexing='ij')
+                img_vote = np.transpose(np.array([u_coords, v_coords]), (1,2,0))
+                img_vote = np.expand_dims(uv_centroid, 0) - img_vote 
+
+                obj_img_list.append((meta_data, img_vote))
+
+            full_img_votes = np.zeros((full_img_height,full_img_width,self.vote_dims), dtype=np.float32)
+            # Empty votes: 2d box index is set to -1
+            full_img_votes[:,:,3::4] = -1.
+
+            for obj_img_data in obj_img_list:
+                meta_data, img_vote = obj_img_data
+                u0, v0, h, w, cls2d, i2d = meta_data
+                for u in range(u0, u0+w):
+                    for v in range(v0, v0+h):
+                        iidx = int(full_img_votes[v,u,0])
+                        if iidx >= MAX_NUM_VOTE_PER_PIXEL: 
+                            continue
+                        full_img_votes[v,u,(1+iidx*4):(1+iidx*4+2)] = img_vote[v-v0,u-u0,:]
+                        full_img_votes[v,u,(1+iidx*4+2)] = cls2d
+                        full_img_votes[v,u,(1+iidx*4+3)] = i2d + 1 # add +1 here as we need a dummy feature for pixels outside all boxes
+                full_img_votes[v0:(v0+h), u0:(u0+w), 0] += 1
+
+            full_img_votes_1d = np.zeros((MAX_NUM_PIXEL*self.vote_dims), dtype=np.float32)
+            full_img_votes_1d[0:full_img_height*full_img_width*self.vote_dims] = full_img_votes.flatten()
+
+            # Semantic cues: one-hot vector for class scores
+            cls_score_feats = np.zeros((1+MAX_NUM_2D_DET,NUM_CLS), dtype=np.float32)
+            ind_obj = np.arange(1,len(cls_id_list)+1)
+            ind_cls = np.array(cls_id_list)
+            cls_score_feats[ind_obj, ind_cls] = np.array(cls_score_list)
+
+            # Texture cues: normalized RGB values
+            full_img = full_img.transpose(2, 0, 1).astype(np.float32)
+            full_img = (full_img - 128.) / 255.
+            # Serialize data to 1D and save image size so that we can recover the original location in the image
+            full_img_1d = np.zeros((MAX_NUM_PIXEL*3), dtype=np.float32)
+            full_img_1d[:full_img_height*full_img_width*3] = full_img.flatten()
 
         if not self.use_color:
             point_cloud = point_cloud[:,0:3]
@@ -100,7 +227,8 @@ class SunrgbdDetectionVotesDataset(Dataset):
 
         # ------------------------------- DATA AUGMENTATION ------------------------------
         if self.augment:
-            if np.random.random() > 0.5:
+            flip_flag = (np.random.random()>0.5)
+            if flip_flag:
                 # Flipping along the YZ plane
                 point_cloud[:,0] = -1 * point_cloud[:,0]
                 bboxes[:,0] = -1 * bboxes[:,0]
@@ -123,6 +251,15 @@ class SunrgbdDetectionVotesDataset(Dataset):
             point_votes[:,4:7] = point_votes_end[:,4:7] - point_cloud[:,0:3]
             point_votes[:,7:10] = point_votes_end[:,7:10] - point_cloud[:,0:3]
 
+            if self.use_imvote:
+                R_inverse = np.copy(np.transpose(rot_mat))
+                if flip_flag:
+                    R_inverse[0,:] *= -1
+                # Update Rtilt according to the augmentation
+                # R_inverse (3x3) * point (3x1) transforms an augmented depth point
+                # to original point in upright_depth coordinates
+                calib_Rtilt = np.dot(np.transpose(R_inverse), calib_Rtilt) 
+
             # Augment RGB color
             if self.use_color:
                 rgb_color = point_cloud[:,3:6] + MEAN_COLOR_RGB
@@ -136,15 +273,17 @@ class SunrgbdDetectionVotesDataset(Dataset):
 
             # Augment point cloud scale: 0.85x-1.15x
             scale_ratio = np.random.random()*0.3+0.85
-            scale_ratio = np.expand_dims(np.tile(scale_ratio,3),0)
-            point_cloud[:,0:3] *= scale_ratio
-            bboxes[:,0:3] *= scale_ratio
-            bboxes[:,3:6] *= scale_ratio
-            point_votes[:,1:4] *= scale_ratio
-            point_votes[:,4:7] *= scale_ratio
-            point_votes[:,7:10] *= scale_ratio
+            if self.use_imvote:
+                calib_Rtilt = np.dot(np.array([[scale_ratio,0,0],[0,scale_ratio,0],[0,0,scale_ratio]]), calib_Rtilt)
+            scale_ratio_expand = np.expand_dims(np.tile(scale_ratio,3),0)
+            point_cloud[:,0:3] *= scale_ratio_expand
+            bboxes[:,0:3] *= scale_ratio_expand
+            bboxes[:,3:6] *= scale_ratio_expand
+            point_votes[:,1:4] *= scale_ratio_expand
+            point_votes[:,4:7] *= scale_ratio_expand
+            point_votes[:,7:10] *= scale_ratio_expand
             if self.use_height:
-                point_cloud[:,-1] *= scale_ratio[0,0]
+                point_cloud[:,-1] *= scale_ratio
 
         # ------------------------------- LABELS ------------------------------
         box3d_centers = np.zeros((MAX_NUM_OBJ, 3))
@@ -208,6 +347,16 @@ class SunrgbdDetectionVotesDataset(Dataset):
         ret_dict['vote_label_mask'] = point_votes_mask.astype(np.int64)
         ret_dict['scan_idx'] = np.array(idx).astype(np.int64)
         ret_dict['max_gt_bboxes'] = max_bboxes
+        if self.use_imvote:
+            ret_dict['scale_ratio'] = np.array(scale_ratio).astype(np.float32)
+            ret_dict['calib_Rtilt'] = calib_Rtilt.astype(np.float32)
+            ret_dict['calib_K'] = calib_K.astype(np.float32)
+            ret_dict['full_img_height'] = np.array(full_img_height).astype(np.int64)
+            ret_dict['full_img_width'] = np.array(full_img_width).astype(np.int64)
+            ret_dict['cls_score_feats'] = cls_score_feats.astype(np.float32)
+            ret_dict['full_img_votes_1d'] = full_img_votes_1d.astype(np.float32)
+            ret_dict['full_img_1d'] = full_img_1d.astype(np.float32)
+
         return ret_dict
 
 def viz_votes(pc, point_votes, point_votes_mask):

@@ -1,7 +1,7 @@
 # ImVoteNet
 **Boosting 3D Object Detection in Point Clouds with Image Votes**
 
-This is code release of the [paper](https://arxiv.org/abs/2001.10692):
+This repository contains the code release of the [paper](https://arxiv.org/abs/2001.10692):
 ```
 @inproceedings{qi2020imvotenet,
   title={Imvotenet: Boosting 3d object detection in point clouds with image votes},
@@ -18,13 +18,9 @@ First install [PyTorch](https://pytorch.org/get-started/locally/), for example t
 ```bash
 conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
 ```
-Next, install Python dependencies via `pip`:
+Next, install Python dependencies via `pip` ([tensorboardX](https://github.com/lanpa/tensorboardX) is used for for visualizations):
 ```bash
-pip install matplotlib opencv-python plyfile trimesh==2.35.39
-```
-We use [tensorboardX](https://github.com/lanpa/tensorboardX) for visualizations, which is installed via:
-```bash
-pip install 'git+https://github.com/lanpa/tensorboardX'
+pip install matplotlib opencv-python plyfile networkx==2.2 trimesh==2.35.39 tensorboardX
 ```
 Now we are ready to clone this repository:
 ```bash
@@ -39,7 +35,7 @@ cd ..
 ```
 
 ## Data
-Please follow the steps listed [here](https://github.com/facebookresearch/votenet/blob/master/sunrgbd/README.md) to set up the SUN RGB-D dataset in the `sunrgbd` folder. The expected dataset structure under `sunrgbd` should be:
+Please follow the steps listed [here](https://github.com/facebookresearch/votenet/blob/master/sunrgbd/README.md) to set up the SUN RGB-D dataset in the `sunrgbd` folder. The expected dataset structure under `sunrgbd` is:
 ```
 sunrgbd/
   sunrgbd_pc_bbox_votes_50k_{v1,v2}_{train,val}/
