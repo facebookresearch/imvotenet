@@ -41,7 +41,7 @@ def softmax(x):
     probs /= np.sum(probs, axis=len(shape)-1, keepdims=True)
     return probs
 
-def parse_predictions(end_points, config_dict):
+def parse_predictions(end_points, config_dict, key_prefix):
     """ Parse predictions to OBB parameters and suppress overlapping boxes
     
     Args:
@@ -58,17 +58,17 @@ def parse_predictions(end_points, config_dict):
             where pred_list_i = [(pred_sem_cls, box_params, box_score)_j]
             where j = 0, ..., num of valid detections - 1 from sample input i
     """
-    pred_center = end_points['center'] # B,num_proposal,3
-    pred_heading_class = torch.argmax(end_points['heading_scores'], -1) # B,num_proposal
-    pred_heading_residual = torch.gather(end_points['heading_residuals'], 2,
+    pred_center = end_points[key_prefix+'center'] # B,num_proposal,3
+    pred_heading_class = torch.argmax(end_points[key_prefix+'heading_scores'], -1) # B,num_proposal
+    pred_heading_residual = torch.gather(end_points[key_prefix+'heading_residuals'], 2,
         pred_heading_class.unsqueeze(-1)) # B,num_proposal,1
     pred_heading_residual.squeeze_(2)
-    pred_size_class = torch.argmax(end_points['size_scores'], -1) # B,num_proposal
-    pred_size_residual = torch.gather(end_points['size_residuals'], 2,
+    pred_size_class = torch.argmax(end_points[key_prefix+'size_scores'], -1) # B,num_proposal
+    pred_size_residual = torch.gather(end_points[key_prefix+'size_residuals'], 2,
         pred_size_class.unsqueeze(-1).unsqueeze(-1).repeat(1,1,1,3)) # B,num_proposal,1,3
     pred_size_residual.squeeze_(2)
-    pred_sem_cls = torch.argmax(end_points['sem_cls_scores'], -1) # B,num_proposal
-    sem_cls_probs = softmax(end_points['sem_cls_scores'].detach().cpu().numpy()) # B,num_proposal,10
+    pred_sem_cls = torch.argmax(end_points[key_prefix+'sem_cls_scores'], -1) # B,num_proposal
+    sem_cls_probs = softmax(end_points[key_prefix+'sem_cls_scores'].detach().cpu().numpy()) # B,num_proposal,10
     pred_sem_cls_prob = np.max(sem_cls_probs,-1) # B,num_proposal
 
     num_proposal = pred_center.shape[1] 
@@ -103,7 +103,7 @@ def parse_predictions(end_points, config_dict):
                     nonempty_box_mask[i,j] = 0
         # -------------------------------------
 
-    obj_logits = end_points['objectness_scores'].detach().cpu().numpy()
+    obj_logits = end_points[key_prefix+'objectness_scores'].detach().cpu().numpy()
     obj_prob = softmax(obj_logits)[:,:,1] # (B,K)
     if not config_dict['use_3d_nms']:
         # ---------- NMS input: pred_with_prob in (B,K,7) -----------
@@ -121,7 +121,7 @@ def parse_predictions(end_points, config_dict):
                 config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert(len(pick)>0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
-        end_points['pred_mask'] = pred_mask
+        end_points[key_prefix+'pred_mask'] = pred_mask
         # ---------- NMS output: pred_mask in (B,K) -----------
     elif config_dict['use_3d_nms'] and (not config_dict['cls_nms']):
         # ---------- NMS input: pred_with_prob in (B,K,7) -----------
@@ -141,7 +141,7 @@ def parse_predictions(end_points, config_dict):
                 config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert(len(pick)>0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
-        end_points['pred_mask'] = pred_mask
+        end_points[key_prefix+'pred_mask'] = pred_mask
         # ---------- NMS output: pred_mask in (B,K) -----------
     elif config_dict['use_3d_nms'] and config_dict['cls_nms']:
         # ---------- NMS input: pred_with_prob in (B,K,8) -----------
@@ -162,7 +162,7 @@ def parse_predictions(end_points, config_dict):
                 config_dict['nms_iou'], config_dict['use_old_type_nms'])
             assert(len(pick)>0)
             pred_mask[i, nonempty_box_inds[pick]] = 1
-        end_points['pred_mask'] = pred_mask
+        end_points[key_prefix+'pred_mask'] = pred_mask
         # ---------- NMS output: pred_mask in (B,K) -----------
 
     batch_pred_map_cls = [] # a list (len: batch_size) of list (len: num of predictions per sample) of tuples of pred_cls, pred_box and conf (0-1)
@@ -176,7 +176,7 @@ def parse_predictions(end_points, config_dict):
         else:
             batch_pred_map_cls.append([(pred_sem_cls[i,j].item(), pred_corners_3d_upright_camera[i,j], obj_prob[i,j]) \
                 for j in range(pred_center.shape[1]) if pred_mask[i,j]==1 and obj_prob[i,j]>config_dict['conf_thresh']])
-    end_points['batch_pred_map_cls'] = batch_pred_map_cls
+    end_points[key_prefix+'batch_pred_map_cls'] = batch_pred_map_cls
 
     return batch_pred_map_cls
 

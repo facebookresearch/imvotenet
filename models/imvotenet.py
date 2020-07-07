@@ -94,7 +94,7 @@ class ImVoteNet(nn.Module):
         # Image feature extractor
         self.image_feature_extractor = ImageFeatureModule(max_imvote_per_pixel=self.max_imvote_per_pixel)
         # MLP on image features before fusing with point features
-        self.image_mlp = ImageMLPModule(image_hidden_dim=image_hidden_dim)
+        self.image_mlp = ImageMLPModule(image_feature_dim, image_hidden_dim=image_hidden_dim)
 
         # Hough voting modules
         self.img_only_vgen = VotingModule(self.vote_factor, image_hidden_dim)
@@ -103,7 +103,7 @@ class ImVoteNet(nn.Module):
 
         # Vote aggregation and detection
         self.img_only_pnet = ProposalModule(num_class, num_heading_bin, num_size_cluster,
-            mean_size_arr, num_proposal, sampling, seed_feat_dim=image_hidden_dim, key_prefix='image_only_')
+            mean_size_arr, num_proposal, sampling, seed_feat_dim=image_hidden_dim, key_prefix='img_only_')
         self.pc_only_pnet = ProposalModule(num_class, num_heading_bin, num_size_cluster,
             mean_size_arr, num_proposal, sampling, seed_feat_dim=256, key_prefix='pc_only_')
         self.pc_img_pnet = ProposalModule(num_class, num_heading_bin, num_size_cluster,

@@ -96,8 +96,8 @@ class VoteNet(nn.Module):
         xyz, features = self.vgen(xyz, features)
         features_norm = torch.norm(features, p=2, dim=1)
         features = features.div(features_norm.unsqueeze(1))
-        end_points['vote_xyz'] = xyz
-        end_points['vote_features'] = features
+        end_points['pc_only_vote_xyz'] = xyz
+        end_points['pc_only_vote_features'] = features
 
         end_points = self.pnet(xyz, features, end_points)
 

@@ -180,12 +180,13 @@ class SunrgbdDetectionVotesDataset(Dataset):
             # Semantic cues: one-hot vector for class scores
             cls_score_feats = np.zeros((1+MAX_NUM_2D_DET,NUM_CLS), dtype=np.float32)
             # First row is dumpy feature
-            ind_obj = np.arange(1,len(cls_id_list)+1)
-            ind_cls = np.array(cls_id_list)
-            cls_score_feats[ind_obj, ind_cls] = np.array(cls_score_list)
+            len_obj = len(cls_id_list)
+            if len_obj:
+                ind_obj = np.arange(1,len_obj+1)
+                ind_cls = np.array(cls_id_list)
+                cls_score_feats[ind_obj, ind_cls] = np.array(cls_score_list)
 
             # Texture cues: normalized RGB values
-            full_img = full_img.transpose(2, 0, 1).astype(np.float32)
             full_img = (full_img - 128.) / 255.
             # Serialize data to 1D and save image size so that we can recover the original location in the image
             full_img_1d = np.zeros((MAX_NUM_PIXEL*3), dtype=np.float32)
@@ -325,7 +326,7 @@ class SunrgbdDetectionVotesDataset(Dataset):
         ret_dict['scan_idx'] = np.array(idx).astype(np.int64)
         ret_dict['max_gt_bboxes'] = max_bboxes
         if self.use_imvote:
-            ret_dict['scale_ratio'] = np.array(scale_ratio).astype(np.float32)
+            ret_dict['scale'] = np.array(scale_ratio).astype(np.float32)
             ret_dict['calib_Rtilt'] = calib_Rtilt.astype(np.float32)
             ret_dict['calib_K'] = calib_K.astype(np.float32)
             ret_dict['full_img_width'] = np.array(full_img_width).astype(np.int64)

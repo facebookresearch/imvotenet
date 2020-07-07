@@ -41,22 +41,25 @@ def append_img_feat(xyz, fp2_features, img_feat_list, end_points):
         new_img_feat_xz_upright[:,:,1] = ray_angle[:,:,2]/(ray_angle[:,:,1]+1e-6) * xyz[:,:,1] - xyz[:,:,2]
         new_img_feat_xz_upright *= img_mask
 
-        # Point features, geometric cues, semantic cues, and texture cues
+        # Point features, geometric cues
         sub_feat_list = [fp2_features, new_img_feat_xz_upright.transpose(2,1), ray_angle.transpose(2,1)]
 
+        # Semantic cues
         img_feat_sem = img_feat[:,:,4].long()
         img_feat_sem = torch.gather(semantic_cues, 1, img_feat_sem.unsqueeze(-1).repeat(1,1,semantic_cues.shape[-1])).transpose(2, 1)
         sub_feat_list.append(img_feat_sem)
 
-        import pdb
-        pdb.set_trace()
-
-        img_feat_tex = img_feat[:,:,2:4]
-        img_feat_tex = sample_from_coarse(spatial_feats, img_feat_spatial, downsample)
-        sub_feat_list.append(img_feat_spatial)
+        # Texture cues
+        img_feat_tex = img_feat[:,:,2:4].long()
+        img_feat_tex = (img_feat_tex[:,:,0] + img_feat_tex[:,:,1] * end_points['full_img_width'].unsqueeze(-1))*3
+        ch0 = torch.gather(texture_cues, 1, img_feat_tex).unsqueeze(1)
+        ch1 = torch.gather(texture_cues, 1, img_feat_tex+1).unsqueeze(1)
+        ch2 = torch.gather(texture_cues, 1, img_feat_tex+2).unsqueeze(1)
+        img_feat_tex = torch.cat((ch0,ch1,ch2), 1)
+        sub_feat_list.append(img_feat_tex)
 
         feat = torch.cat(sub_feat_list, 1)
-        feat_list.append(feat) # B,C,N
+        feat_list.append(feat)
         xyz_list.append(xyz)
         seed_inds_list.append(seed_inds)
 
@@ -73,7 +76,7 @@ class ImageFeatureModule(nn.Module):
         self.vote_dims = 1+self.max_imvote_per_pixel*4
 
     def forward(self, end_points):
-        xyz2 = torch.matmul(end_points['calib_Rtilt'].transpose(2,1), (1/(end_points['scale_ratio']**2)).unsqueeze(-1).unsqueeze(-1)*end_points['seed_xyz'].transpose(2,1))
+        xyz2 = torch.matmul(end_points['calib_Rtilt'].transpose(2,1), (1/(end_points['scale']**2)).unsqueeze(-1).unsqueeze(-1)*end_points['seed_xyz'].transpose(2,1))
         xyz2 = xyz2.transpose(2,1)
         xyz2[:,:,[0,1,2]] = xyz2[:,:,[0,2,1]]
         xyz2[:,:,1] *= -1
@@ -91,7 +94,7 @@ class ImageFeatureModule(nn.Module):
         img_feat_list = []
         batch_size = xyz2.shape[0]
         num_seed = xyz2.shape[1]
-        for i in range(self.max_num_votes):
+        for i in range(self.max_imvote_per_pixel):
             vote_i_0 = torch.gather(full_img_votes_1d, 1, idx_beg+1+i*4)
             vote_i_1 = torch.gather(full_img_votes_1d, 1, idx_beg+1+i*4+1)
             seed_gt_votes_i = torch.cat((vote_i_0.unsqueeze(-1), vote_i_1.unsqueeze(-1)), -1)
@@ -108,12 +111,12 @@ class ImageFeatureModule(nn.Module):
 
 
 class ImageMLPModule(nn.Module):
-    def __init__(self, image_hidden_dim=256):
+    def __init__(self, input_dim, image_hidden_dim=256):
         super().__init__()
-        self.img_feat_conv1 = torch.nn.Conv1d(input_dim, img_hidden_dim, 1)
-        self.img_feat_conv2 = torch.nn.Conv1d(img_hidden_dim, img_hidden_dim, 1)
-        self.img_feat_bn1 = torch.nn.BatchNorm1d(img_hidden_dim)
-        self.img_feat_bn2 = torch.nn.BatchNorm1d(img_hidden_dim)
+        self.img_feat_conv1 = torch.nn.Conv1d(input_dim, image_hidden_dim, 1)
+        self.img_feat_conv2 = torch.nn.Conv1d(image_hidden_dim, image_hidden_dim, 1)
+        self.img_feat_bn1 = torch.nn.BatchNorm1d(image_hidden_dim)
+        self.img_feat_bn2 = torch.nn.BatchNorm1d(image_hidden_dim)
 
     def forward(self, img_features):
         img_features = F.relu(self.img_feat_bn1(self.img_feat_conv1(img_features)))

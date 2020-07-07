@@ -66,6 +66,7 @@ parser.add_argument('--use_color', action='store_true', help='Use RGB color in i
 parser.add_argument('--use_sunrgbd_v2', action='store_true', help='Use V2 box labels for SUN RGB-D dataset')
 parser.add_argument('--overwrite', action='store_true', help='Overwrite existing log and dump folders.')
 parser.add_argument('--dump_results', action='store_true', help='Dump results.')
+parser.add_argument('--num_workers', type=int, default=4, help='Number of works for loading training data [default: 4]')
 FLAGS = parser.parse_args()
 
 # ------------------------------------------------------------------------- GLOBAL CONFIG BEG
@@ -93,7 +94,7 @@ if FLAGS.use_imvotenet:
     print('Tower weights', TOWER_WEIGHTS)
 else:
     KEY_PREFIX_LIST = ['pc_only_']
-    TOWER_WEIGHTS = {'pc_only_': 1.0}
+    TOWER_WEIGHTS = {'pc_only_weight': 1.0}
 
 # Prepare LOG_DIR and DUMP_DIR
 if os.path.exists(LOG_DIR) and FLAGS.overwrite:
@@ -140,9 +141,9 @@ TEST_DATASET = SunrgbdDetectionVotesDataset('val', num_points=NUM_POINT,
     use_v1=(not FLAGS.use_sunrgbd_v2))
 print(len(TRAIN_DATASET), len(TEST_DATASET))
 TRAIN_DATALOADER = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE,
-    shuffle=True, num_workers=4, worker_init_fn=my_worker_init_fn)
+    shuffle=True, num_workers=FLAGS.num_workers, worker_init_fn=my_worker_init_fn)
 TEST_DATALOADER = DataLoader(TEST_DATASET, batch_size=BATCH_SIZE,
-    shuffle=False, num_workers=4, worker_init_fn=my_worker_init_fn)
+    shuffle=False, num_workers=FLAGS.num_workers, worker_init_fn=my_worker_init_fn)
 print(len(TRAIN_DATALOADER), len(TEST_DATALOADER))
 
 # Init the model and optimzier
@@ -151,14 +152,16 @@ num_input_channel = int(FLAGS.use_color)*3 + int(not FLAGS.no_height)*1
 
 if FLAGS.use_imvotenet:
     MODEL = importlib.import_module('imvotenet')
-    net = MODEL.VoteNet(num_class=DATASET_CONFIG.num_class,
+    net = MODEL.ImVoteNet(num_class=DATASET_CONFIG.num_class,
                         num_heading_bin=DATASET_CONFIG.num_heading_bin,
                         num_size_cluster=DATASET_CONFIG.num_size_cluster,
                         mean_size_arr=DATASET_CONFIG.mean_size_arr,
                         num_proposal=FLAGS.num_target,
                         input_feature_dim=num_input_channel,
                         vote_factor=FLAGS.vote_factor,
-                        sampling=FLAGS.cluster_sampling)
+                        sampling=FLAGS.cluster_sampling,
+                        max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
+                        image_feature_dim=TRAIN_DATASET.image_feature_dim)
 
 else:
     MODEL = importlib.import_module('votenet')
@@ -169,9 +172,7 @@ else:
                         num_proposal=FLAGS.num_target,
                         input_feature_dim=num_input_channel,
                         vote_factor=FLAGS.vote_factor,
-                        sampling=FLAGS.cluster_sampling,
-                        max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
-                        image_feature_dim=TRAIN_DATASET.image_feature_dim)
+                        sampling=FLAGS.cluster_sampling)
 
 if torch.cuda.device_count() > 1:
   log_string("Let's use %d GPUs!" % (torch.cuda.device_count()))
@@ -238,7 +239,8 @@ def train_one_epoch():
         optimizer.zero_grad()
         inputs = {'point_clouds': batch_data_label['point_clouds']}
         if FLAGS.use_imvotenet:
-            inputs.update({'calib_K': batch_data_label['calib_K'],
+            inputs.update({'scale': batch_data_label['scale'],
+                           'calib_K': batch_data_label['calib_K'],
                            'calib_Rtilt': batch_data_label['calib_Rtilt'],
                            'cls_score_feats': batch_data_label['cls_score_feats'],
                            'full_img_votes_1d': batch_data_label['full_img_votes_1d'],
@@ -290,7 +292,8 @@ def evaluate_one_epoch():
         # Forward pass
         inputs = {'point_clouds': batch_data_label['point_clouds']}
         if FLAGS.use_imvotenet:
-            inputs.update({'calib_K': batch_data_label['calib_K'],
+            inputs.update({'scale': batch_data_label['scale'],
+                           'calib_K': batch_data_label['calib_K'],
                            'calib_Rtilt': batch_data_label['calib_Rtilt'],
                            'cls_score_feats': batch_data_label['cls_score_feats'],
                            'full_img_votes_1d': batch_data_label['full_img_votes_1d'],
