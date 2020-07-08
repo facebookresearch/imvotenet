@@ -109,7 +109,7 @@ class ImVoteNet(nn.Module):
         self.pc_img_pnet = ProposalModule(num_class, num_heading_bin, num_size_cluster,
             mean_size_arr, num_proposal, sampling, seed_feat_dim=image_hidden_dim+256, key_prefix='pc_img_')
 
-    def forward(self, inputs):
+    def forward(self, inputs, joint_only=False):
         """ Forward pass of the network
 
         Args:
@@ -154,23 +154,24 @@ class ImVoteNet(nn.Module):
         img_features = self.image_mlp(img_features)
         joint_features = torch.cat((pc_features, img_features), 1)
 
-        # --------- IMAGE-ONLY TOWER ---------
-        prefix = 'img_only_'
-        xyz, features = self.img_only_vgen(end_points['seed_xyz'], img_features)
-        features_norm = torch.norm(features, p=2, dim=1)
-        features = features.div(features_norm.unsqueeze(1))
-        end_points[prefix+'vote_xyz'] = xyz
-        end_points[prefix+'vote_features'] = features
-        end_points = self.img_only_pnet(xyz, features, end_points)
+        if not joint_only:
+            # --------- IMAGE-ONLY TOWER ---------
+            prefix = 'img_only_'
+            xyz, features = self.img_only_vgen(end_points['seed_xyz'], img_features)
+            features_norm = torch.norm(features, p=2, dim=1)
+            features = features.div(features_norm.unsqueeze(1))
+            end_points[prefix+'vote_xyz'] = xyz
+            end_points[prefix+'vote_features'] = features
+            end_points = self.img_only_pnet(xyz, features, end_points)
 
-        # --------- POINTS-ONLY TOWER ---------
-        prefix = 'pc_only_'
-        xyz, features = self.pc_only_vgen(end_points['seed_xyz'], pc_features)
-        features_norm = torch.norm(features, p=2, dim=1)
-        features = features.div(features_norm.unsqueeze(1))
-        end_points[prefix+'vote_xyz'] = xyz
-        end_points[prefix+'vote_features'] = features
-        end_points = self.pc_only_pnet(xyz, features, end_points)
+            # --------- POINTS-ONLY TOWER ---------
+            prefix = 'pc_only_'
+            xyz, features = self.pc_only_vgen(end_points['seed_xyz'], pc_features)
+            features_norm = torch.norm(features, p=2, dim=1)
+            features = features.div(features_norm.unsqueeze(1))
+            end_points[prefix+'vote_xyz'] = xyz
+            end_points[prefix+'vote_features'] = features
+            end_points = self.pc_only_pnet(xyz, features, end_points)
 
         # --------- JOINT TOWER ---------
         prefix = 'pc_img_'

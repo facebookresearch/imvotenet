@@ -2,7 +2,7 @@
 **Boosting 3D Object Detection in Point Clouds with Image Votes**
 
 <p align="center">
-  <img src="http://xinleic.xyz/images/imvote.png" width="500" />
+  <img src="http://xinleic.xyz/images/imvote.png" width="600" />
 </p>
 
 This repository contains the code release of the [paper](https://arxiv.org/abs/2001.10692):
@@ -56,21 +56,32 @@ Once the code and data are set up, one can train ImVoteNet by the following comm
 ```bash
 CUDA_VISIBLE_DEVICES=0 python train.py --use_imvotenet --log_dir log_imvotenet
 ```
+The setting `CUDA_VISIBLE_DEVICES=0` forces the model to be trained on a single GPU (GPU `0` in this case). With the default batch size of 8, it takes about 7G memory during training. 
 
 To reproduce the experimental results in the paper and in general have faster development cycles, one can use a shorter learning schedule: 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train.py --use_imvotenet --log_dir log_140ep --max_epoch 140 --lr_decay_steps 80,120 --lr_decay_rates 0.1,0.1
+CUDA_VISIBLE_DEVICES=1 python train.py --use_imvotenet --log_dir log_140ep --max_epoch 140 --lr_decay_steps 80,120 --lr_decay_rates 0.1,0.1
 ```
 
 As a baseline, this code also supports training of the original VoteNet, which is launched by:
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train.py --log_dir log_votenet
+CUDA_VISIBLE_DEVICES=2 python train.py --log_dir log_votenet
 ```
 In fact, the code is based on the VoteNet repository at commit [2f6d6d3](https://github.com/facebookresearch/votenet/tree/2f6d6d3), as a reference, it gives around 58 mAP@0.25.
 
 For other training options, one can use `python train.py -h` for assistance.
 
+After the model is trained, the checkpoint can be tested and evaluated on the `val` set via:
+```bash
+python eval.py --use_imvotenet --checkpoint_path log_imvotenet/checkpoint.tar --dump_dir eval_imvotenet --cluster_sampling seed_fps --use_3d_nms --use_cls_nms --per_class_proposal
+```
+For reference, ImVoteNet gives around ?? mAP@0.25. 
+
 ## TODO
 1. Check the intermediate dimension of `VotingModule` (whether fixed 256, or change as input dimension changes)
 2. Learning rate schedule, check the 140/180/200 epoch schedules
 3. Add docs for some functions
+
+## LICENSE
+
+The code is released under the [MIT license](LICENSE).

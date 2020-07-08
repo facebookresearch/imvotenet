@@ -159,8 +159,11 @@ def evaluate_one_epoch():
                            'full_img_1d': batch_data_label['full_img_1d'],
                            'full_img_width': batch_data_label['full_img_width'],
                            })
-        with torch.no_grad():
-            end_points = net(inputs)
+            with torch.no_grad():
+                end_points = net(inputs, joint_only=True)
+        else:
+            with torch.no_grad():
+                end_points = net(inputs)
 
         # Compute loss
         for key in batch_data_label:
