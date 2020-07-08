@@ -1,6 +1,10 @@
 # ImVoteNet
 **Boosting 3D Object Detection in Point Clouds with Image Votes**
 
+<p align="center">
+  <img src="http://xinleic.xyz/images/imvote.png" width="500" />
+</p>
+
 This repository contains the code release of the [paper](https://arxiv.org/abs/2001.10692):
 ```
 @inproceedings{qi2020imvotenet,
@@ -47,6 +51,24 @@ sunrgbd/
 For ImVoteNet, we provide 2D detection results from a pre-trained Faster R-CNN detector [here](https://dl.fbaipublicfiles.com/imvotenet/2d_bbox/sunrgbd_2d_bbox_50k_v1.tgz). Please download the file, uncompress it, and place the resulting folders (`sunrgbd_2d_bbox_50k_v1_{train,val}`) under `sunrgbd` as well.
 
 ## Training and Evaluation
+
+Once the code and data are set up, one can train ImVoteNet by the following command:
+```bash
+CUDA_VISIBLE_DEVICES=0 python train.py --use_imvotenet --log_dir log_imvotenet
+```
+
+To reproduce the experimental results in the paper and in general have faster development cycles, one can use a shorter learning schedule: 
+```bash
+CUDA_VISIBLE_DEVICES=0 python train.py --use_imvotenet --log_dir log_140ep --max_epoch 140 --lr_decay_steps 80,120 --lr_decay_rates 0.1,0.1
+```
+
+As a baseline, this code also supports training of the original VoteNet, which is launched by:
+```bash
+CUDA_VISIBLE_DEVICES=0 python train.py --log_dir log_votenet
+```
+In fact, the code is based on the VoteNet repository at commit [2f6d6d3](https://github.com/facebookresearch/votenet/tree/2f6d6d3), as a reference, it gives around 58 mAP@0.25.
+
+For other training options, one can use `python train.py -h` for assistance.
 
 ## TODO
 1. Check the intermediate dimension of `VotingModule` (whether fixed 256, or change as input dimension changes)

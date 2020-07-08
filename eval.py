@@ -22,7 +22,10 @@ sys.path.append(os.path.join(ROOT_DIR, 'models'))
 from ap_helper import APCalculator, parse_predictions, parse_groundtruths
 
 parser = argparse.ArgumentParser()
+# ImVoteNet related options
 parser.add_argument('--use_imvotenet', action='store_true', help='Use ImVoteNet (instead of VoteNet) with RGB.')
+parser.add_argument('--max_imvote_per_pixel', type=int, default=3, help='Maximum number of image votes per pixel [default: 3]')
+# Shared options with VoteNet
 parser.add_argument('--checkpoint_path', default=None, help='Model checkpoint path [default: None]')
 parser.add_argument('--dump_dir', default=None, help='Dump dir to save sample outputs [default: None]')
 parser.add_argument('--num_point', type=int, default=20000, help='Point Number [default: 20000]')
@@ -55,6 +58,12 @@ CHECKPOINT_PATH = FLAGS.checkpoint_path
 assert(CHECKPOINT_PATH is not None)
 FLAGS.DUMP_DIR = DUMP_DIR
 AP_IOU_THRESHOLDS = [float(x) for x in FLAGS.ap_iou_thresholds.split(',')]
+if FLAGS.use_imvotenet:
+    KEY_PREFIX_LIST = ['pc_img_']
+    TOWER_WEIGHTS = {'pc_img_weight': 1.0}
+else:
+    KEY_PREFIX_LIST = ['pc_only_']
+    TOWER_WEIGHTS = {'pc_only_weight': 1.0}
 
 # Prepare DUMP_DIR
 if not os.path.exists(DUMP_DIR): os.mkdir(DUMP_DIR)
@@ -82,19 +91,32 @@ TEST_DATALOADER = DataLoader(TEST_DATASET, batch_size=BATCH_SIZE,
     shuffle=FLAGS.shuffle_dataset, num_workers=4, worker_init_fn=my_worker_init_fn)
 
 # Init the model and optimzier
-MODEL = importlib.import_module(FLAGS.model) # import network module
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 num_input_channel = int(FLAGS.use_color)*3 + int(not FLAGS.no_height)*1
 
-Detector = MODEL.VoteNet
-net = Detector(num_class=DATASET_CONFIG.num_class,
-               num_heading_bin=DATASET_CONFIG.num_heading_bin,
-               num_size_cluster=DATASET_CONFIG.num_size_cluster,
-               mean_size_arr=DATASET_CONFIG.mean_size_arr,
-               num_proposal=FLAGS.num_target,
-               input_feature_dim=num_input_channel,
-               vote_factor=FLAGS.vote_factor,
-               sampling=FLAGS.cluster_sampling)
+if FLAGS.use_imvotenet:
+    MODEL = importlib.import_module('imvotenet')
+    net = MODEL.ImVoteNet(num_class=DATASET_CONFIG.num_class,
+                        num_heading_bin=DATASET_CONFIG.num_heading_bin,
+                        num_size_cluster=DATASET_CONFIG.num_size_cluster,
+                        mean_size_arr=DATASET_CONFIG.mean_size_arr,
+                        num_proposal=FLAGS.num_target,
+                        input_feature_dim=num_input_channel,
+                        vote_factor=FLAGS.vote_factor,
+                        sampling=FLAGS.cluster_sampling,
+                        max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
+                        image_feature_dim=TRAIN_DATASET.image_feature_dim)
+
+else:
+    MODEL = importlib.import_module('votenet')
+    net = Detector(num_class=DATASET_CONFIG.num_class,
+                   num_heading_bin=DATASET_CONFIG.num_heading_bin,
+                   num_size_cluster=DATASET_CONFIG.num_size_cluster,
+                   mean_size_arr=DATASET_CONFIG.mean_size_arr,
+                   num_proposal=FLAGS.num_target,
+                   input_feature_dim=num_input_channel,
+                   vote_factor=FLAGS.vote_factor,
+                   sampling=FLAGS.cluster_sampling)
 net.to(device)
 criterion = MODEL.get_loss
 
@@ -128,14 +150,23 @@ def evaluate_one_epoch():
         
         # Forward pass
         inputs = {'point_clouds': batch_data_label['point_clouds']}
+        if FLAGS.use_imvotenet:
+            inputs.update({'scale': batch_data_label['scale'],
+                           'calib_K': batch_data_label['calib_K'],
+                           'calib_Rtilt': batch_data_label['calib_Rtilt'],
+                           'cls_score_feats': batch_data_label['cls_score_feats'],
+                           'full_img_votes_1d': batch_data_label['full_img_votes_1d'],
+                           'full_img_1d': batch_data_label['full_img_1d'],
+                           'full_img_width': batch_data_label['full_img_width'],
+                           })
         with torch.no_grad():
             end_points = net(inputs)
 
         # Compute loss
         for key in batch_data_label:
-            assert(key not in end_points)
-            end_points[key] = batch_data_label[key]
-        loss, end_points = criterion(end_points, DATASET_CONFIG)
+            if key not in end_points:
+                end_points[key] = batch_data_label[key]
+        loss, end_points = criterion(end_points, DATASET_CONFIG, KEY_PREFIX_LIST, TOWER_WEIGHTS)
 
         # Accumulate statistics and print out
         for key in end_points:
@@ -143,7 +174,7 @@ def evaluate_one_epoch():
                 if key not in stat_dict: stat_dict[key] = 0
                 stat_dict[key] += end_points[key].item()
 
-        batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT) 
+        batch_pred_map_cls = parse_predictions(end_points, CONFIG_DICT, KEY_PREFIX_LIST[0]) 
         batch_gt_map_cls = parse_groundtruths(end_points, CONFIG_DICT) 
         for ap_calculator in ap_calculator_list:
             ap_calculator.step(batch_pred_map_cls, batch_gt_map_cls)

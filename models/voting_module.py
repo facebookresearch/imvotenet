@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VotingModule(nn.Module):
-    def __init__(self, vote_factor, seed_feature_dim):
+    def __init__(self, vote_factor, seed_feature_dim, int_feature_dim=256):
         """ Votes generation from seed point features.
 
         Args:
@@ -29,11 +29,11 @@ class VotingModule(nn.Module):
         self.vote_factor = vote_factor
         self.in_dim = seed_feature_dim
         self.out_dim = self.in_dim # due to residual feature, in_dim has to be == out_dim
-        self.conv1 = torch.nn.Conv1d(self.in_dim, self.in_dim, 1)
-        self.conv2 = torch.nn.Conv1d(self.in_dim, self.in_dim, 1)
-        self.conv3 = torch.nn.Conv1d(self.in_dim, (3+self.out_dim) * self.vote_factor, 1)
-        self.bn1 = torch.nn.BatchNorm1d(self.in_dim)
-        self.bn2 = torch.nn.BatchNorm1d(self.in_dim)
+        self.conv1 = torch.nn.Conv1d(self.in_dim, int_feature_dim, 1)
+        self.conv2 = torch.nn.Conv1d(int_feature_dim, int_feature_dim, 1)
+        self.conv3 = torch.nn.Conv1d(int_feature_dim, (3+self.out_dim) * self.vote_factor, 1)
+        self.bn1 = torch.nn.BatchNorm1d(int_feature_dim)
+        self.bn2 = torch.nn.BatchNorm1d(int_feature_dim)
         
     def forward(self, seed_xyz, seed_features):
         """ Forward pass.
