@@ -12,7 +12,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(BASE_DIR)
 
-def append_img_feat(xyz, fp2_features, img_feat_list, end_points):
+def append_img_feat(img_feat_list, end_points):
     batch_size = xyz.shape[0]
     num_seed = xyz.shape[1]
     feat_list = []
@@ -20,6 +20,8 @@ def append_img_feat(xyz, fp2_features, img_feat_list, end_points):
     seed_inds_list = []
 
     seed_inds = end_points['fp2_inds']
+    xyz = end_points['fp2_xyz']
+    fp2_features = end_points['fp2_features']
     semantic_cues = end_points['cls_score_feats']
     texture_cues = end_points['full_img_1d']
     calib_Rtilt = end_points['calib_Rtilt']
@@ -76,7 +78,7 @@ class ImageFeatureModule(nn.Module):
         self.vote_dims = 1+self.max_imvote_per_pixel*4
 
     def forward(self, end_points):
-        xyz2 = torch.matmul(end_points['calib_Rtilt'].transpose(2,1), (1/(end_points['scale']**2)).unsqueeze(-1).unsqueeze(-1)*end_points['seed_xyz'].transpose(2,1))
+        xyz2 = torch.matmul(end_points['calib_Rtilt'].transpose(2,1), (1/(end_points['scale']**2)).unsqueeze(-1).unsqueeze(-1)*end_points['fp2_xyz'].transpose(2,1))
         xyz2 = xyz2.transpose(2,1)
         xyz2[:,:,[0,1,2]] = xyz2[:,:,[0,2,1]]
         xyz2[:,:,1] *= -1

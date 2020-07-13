@@ -5,8 +5,8 @@
 
 ''' Voting module: generate votes from XYZ and features of seed points.
 
-Date: July, 2019
-Author: Charles R. Qi and Or Litany
+Date: July, 2019 (modified July, 2020)
+Author: Charles R. Qi, Or Litany and Xinlei Chen
 '''
 
 import torch

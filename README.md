@@ -75,12 +75,10 @@ After the model is trained, the checkpoint can be tested and evaluated on the `v
 ```bash
 python eval.py --use_imvotenet --checkpoint_path log_imvotenet/checkpoint.tar --dump_dir eval_imvotenet --cluster_sampling seed_fps --use_3d_nms --use_cls_nms --per_class_proposal
 ```
-For reference, ImVoteNet gives around ?? mAP@0.25. 
+For reference, ImVoteNet gives around 63 mAP@0.25. 
 
 ## TODO
-1. Check the intermediate dimension of `VotingModule` (whether fixed 256, or change as input dimension changes)
-2. Learning rate schedule, check the 140/180/200 epoch schedules
-3. Add docs for some functions
+- Add docs for some functions
 
 ## LICENSE
 

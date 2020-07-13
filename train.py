@@ -6,7 +6,7 @@
 """ Training routine for 3D object detection on SUN RGB-D with VoteNet/ImVoteNet.
 
 Sample usage:
-python train.py --use_imvote --log_dir log_imvotenet
+python train.py --use_imvotenet --log_dir log_imvotenet
 
 To use Tensorboard (need to install TensorFlow):
 At server:
@@ -127,18 +127,22 @@ sys.path.append(os.path.join(ROOT_DIR, 'sunrgbd'))
 from sunrgbd_detection_dataset import SunrgbdDetectionVotesDataset, MAX_NUM_OBJ
 from model_util_sunrgbd import SunrgbdDatasetConfig
 DATASET_CONFIG = SunrgbdDatasetConfig()
-TRAIN_DATASET = SunrgbdDetectionVotesDataset('train', num_points=NUM_POINT,
-    augment=True,
-    use_color=FLAGS.use_color, use_height=(not FLAGS.no_height),
-    use_imvote=FLAGS.use_imvotenet,
-    max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
-    use_v1=(not FLAGS.use_sunrgbd_v2))
-TEST_DATASET = SunrgbdDetectionVotesDataset('val', num_points=NUM_POINT,
-    augment=False,
-    use_color=FLAGS.use_color, use_height=(not FLAGS.no_height),
-    use_imvote=FLAGS.use_imvotenet,
-    max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
-    use_v1=(not FLAGS.use_sunrgbd_v2))
+TRAIN_DATASET = SunrgbdDetectionVotesDataset('train', 
+                                            num_points=NUM_POINT,
+                                            augment=True,
+                                            use_color=FLAGS.use_color, 
+                                            use_height=(not FLAGS.no_height),
+                                            use_imvote=FLAGS.use_imvotenet,
+                                            max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
+                                            use_v1=(not FLAGS.use_sunrgbd_v2))
+TEST_DATASET = SunrgbdDetectionVotesDataset('val', 
+                                            num_points=NUM_POINT,
+                                            augment=False,
+                                            use_color=FLAGS.use_color, 
+                                            use_height=(not FLAGS.no_height),
+                                            use_imvote=FLAGS.use_imvotenet,
+                                            max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
+                                            use_v1=(not FLAGS.use_sunrgbd_v2))
 print(len(TRAIN_DATASET), len(TEST_DATASET))
 TRAIN_DATALOADER = DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE,
     shuffle=True, num_workers=FLAGS.num_workers, worker_init_fn=my_worker_init_fn)
@@ -322,7 +326,7 @@ def evaluate_one_epoch():
 
         # Dump evaluation results for visualization
         if FLAGS.dump_results and batch_idx == 0 and EPOCH_CNT %10 == 0:
-            MODEL.dump_results(end_points, DUMP_DIR, DATASET_CONFIG) 
+            MODEL.dump_results(end_points, DUMP_DIR, DATASET_CONFIG, key_prefix=KEY_PREFIX_LIST[-1]) 
 
     # Log statistics
     TEST_VISUALIZER.log_scalars({key:stat_dict[key]/float(batch_idx+1) for key in stat_dict},

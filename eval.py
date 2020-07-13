@@ -105,7 +105,7 @@ if FLAGS.use_imvotenet:
                         vote_factor=FLAGS.vote_factor,
                         sampling=FLAGS.cluster_sampling,
                         max_imvote_per_pixel=FLAGS.max_imvote_per_pixel,
-                        image_feature_dim=TRAIN_DATASET.image_feature_dim)
+                        image_feature_dim=TEST_DATASET.image_feature_dim)
 
 else:
     MODEL = importlib.import_module('votenet')
@@ -184,7 +184,7 @@ def evaluate_one_epoch():
     
         # Dump evaluation results for visualization
         if batch_idx == 0:
-            MODEL.dump_results(end_points, DUMP_DIR, DATASET_CONFIG)
+            MODEL.dump_results(end_points, DUMP_DIR, DATASET_CONFIG, key_prefix=KEY_PREFIX_LIST[-1])
 
     # Log statistics
     for key in sorted(stat_dict.keys()):
