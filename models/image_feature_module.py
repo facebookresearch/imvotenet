@@ -13,14 +13,14 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(BASE_DIR)
 
 def append_img_feat(img_feat_list, end_points):
-    batch_size = xyz.shape[0]
-    num_seed = xyz.shape[1]
     feat_list = []
     xyz_list = []
     seed_inds_list = []
 
     seed_inds = end_points['fp2_inds']
     xyz = end_points['fp2_xyz']
+    batch_size = xyz.shape[0]
+    num_seed = xyz.shape[1]
     fp2_features = end_points['fp2_features']
     semantic_cues = end_points['cls_score_feats']
     texture_cues = end_points['full_img_1d']
