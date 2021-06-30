@@ -38,6 +38,15 @@ cd pointnet2
 python setup.py install
 cd ..
 ```
+## Run Demo
+The pre-trained model with sample point clouds, RGB Image, Depth Map, Camera Calib and the 2D bounding box detections are available in the demo folder. 
+Run:
+```bash
+python demo.py
+```
+The demo uses a pre-trained model (on SUN RGB-D) to detect objects in a point cloud from an indoor room (from SUN RGB-D val set). You can use 3D visualization software such as the MeshLab to open the dumped file under `demo_files/demo_results` to see the 3D detection output. Specifically, open `***_pc.ply` and `***_pred_confident_nms_bbox.ply` to see the input point cloud and predicted 3D bounding boxes. You can check the `***_pred_map_cls.txt` to get class labels of the detected objects.
+
+The ImVoteNet model needs the point cloud as well as the geometric, semantic and texture cues extracted from the RGB Image as input. `demo.py` creates a pipeline that inputs the RGB Image, Depth Map, Camera Calib and the 2D bounding box detections (Faster RCNN 2d object detectionn backbone output) to output all necessary inputs for ImVoteNet training in the right format. It further uses the pre-trained model to detect objects.
 
 ## Data
 Please follow the steps listed [here](https://github.com/facebookresearch/votenet/blob/master/sunrgbd/README.md) to set up the SUN RGB-D dataset in the `sunrgbd` folder. The expected dataset structure under `sunrgbd` is:
