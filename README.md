@@ -107,8 +107,14 @@ The official ImVoteNet repository does not provide the pre-trained Faster RCNN m
 
 Currently the `demo.py` script directly uses RGB Images from the SUN RGB-D val dataset and thus the 2D bbox detections can directly be downloaded and used. But incase we want to run the demo script on a custom RGB Image, we need the 2D bbox detection in the right format to run the demo script. 
 
-`fasterRCNN_detections.py` uses a pretrained Faster RCNN on Open Images V4 Dataset with 600 categories with ImageNet pre-trained Inception Resnet V2 as image feature extractor. The inference block added in the script makes sure that only objects of interest are detected and saved in a `.txt` file as required by ImvoteNet.
+`fasterRCNN_detections.py` uses a pretrained Faster RCNN on Open Images V4 Dataset from the tensorflow-hub. It's been trained on 600 categories with ImageNet pre-trained Inception Resnet V2 as image feature extractor. The inference block added in the script makes sure that only objects of interest are detected and saved in a `.txt` file as required by ImvoteNet.
 
+Firtly install dependencies:
+```bash
+pip install tensorflow-gpu
+pip install tensorflow-hub
+
+```
 Run:
 ```bash
 python fasterRCNN_detections.py
