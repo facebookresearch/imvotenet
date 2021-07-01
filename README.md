@@ -1,3 +1,8 @@
+## Contributing
+1. A python script `demo.py` that uses a pre-trained model to detect objects in a point cloud. (without downloading data | SUN RGB-D val set samples and pre-trained model provided in `demo` folder). Check `Run Demo`.
+2. A python script `fasterRCNN_detections.py` that uses a pre-trained Faster RCNN model trained on the Open Images V4 dataset to output 2D object detections in the format required by ImVoteNet. Check `FasterRCNN Detections` at the end of the file.
+3. Fixes to issues I ran into while training. Check `Fixes` at the end of the file.
+
 # ImVoteNet
 **Boosting 3D Object Detection in Point Clouds with Image Votes**
 
@@ -29,7 +34,7 @@ pip install tensorboardX --no-deps
 ```
 Now we are ready to clone this repository:
 ```bash
-git clone git@github.com:facebookresearch/imvotenet.git
+git clone git@github.com:Sakshee5/imvotenet.git
 cd imvotenet
 ```
 The code depends on [PointNet++](http://arxiv.org/abs/1706.02413) as a backbone, which needs compilation:
@@ -39,14 +44,14 @@ python setup.py install
 cd ..
 ```
 ## Run Demo
-The pre-trained model with sample point clouds, RGB Image, Depth Map, Camera Calib and the 2D bounding box detections are available in the demo folder. 
-Run:
+The pre-trained model with sample point clouds, RGB Images, Depth Maps, Camera Calib and the 2D bounding box detections are available in the demo folder. 
+After completing installation, Run:
 ```bash
 python demo.py
 ```
-The demo uses a pre-trained model (on SUN RGB-D) to detect objects in a point cloud from an indoor room (from SUN RGB-D val set). You can use 3D visualization software such as the MeshLab to open the dumped file under `demo_files/demo_results` to see the 3D detection output. Specifically, open `***_pc.ply` and `***_pred_confident_nms_bbox.ply` to see the input point cloud and predicted 3D bounding boxes. You can check the `***_pred_map_cls.txt` to get class labels of the detected objects.
+The demo uses a pre-trained model (on SUN RGB-D) to detect objects in a point cloud from an indoor room (from SUN RGB-D val set). You can use 3D visualization software such as the MeshLab to open the dumped file under `demo/results` to see the 3D detection output. Specifically, open `***_pc.ply` and `***_pred_confident_nms_bbox.ply` to see the input point cloud and predicted 3D bounding boxes. Incase you want to check the class labels of the detected objects, set `inference_switch = True` in the second last line of `demo.py`. You can check the `***_pred_map_cls.txt` to get the class labels.
 
-The ImVoteNet model needs the point cloud as well as the geometric, semantic and texture cues extracted from the RGB Image as input. `demo.py` creates a pipeline that inputs the RGB Image, Depth Map, Camera Calib and the 2D bounding box detections (Faster RCNN 2d object detectionn backbone output) to output all necessary inputs for ImVoteNet training in the right format. It further uses the pre-trained model to detect objects.
+The ImVoteNet model needs the point cloud as well as the geometric, semantic and texture cues extracted from the RGB Image as input. `demo.py` creates a pipeline that inputs the RGB Image, Depth Map, Camera Calib and the 2D bounding box detections (Faster RCNN 2d object detection backbone output) to output all necessary inputs for ImVoteNet model in the right format. It further uses the pre-trained model to detect objects.
 
 ## Data
 Please follow the steps listed [here](https://github.com/facebookresearch/votenet/blob/master/sunrgbd/README.md) to set up the SUN RGB-D dataset in the `sunrgbd` folder. The expected dataset structure under `sunrgbd` is:
@@ -94,3 +99,85 @@ For reference, ImVoteNet gives around 63 mAP@0.25.
 ## LICENSE
 
 The code is released under the [MIT license](LICENSE).
+
+## FasterRCNN Detections
+The official ImVoteNet repository does not provide the pre-trained Faster RCNN model. Instead you are directly supposed to download the `.txt` files and use them for training.
+
+(Refer: For ImVoteNet, we provide 2D detection results from a pre-trained Faster R-CNN detector [here](https://dl.fbaipublicfiles.com/imvotenet/2d_bbox/sunrgbd_2d_bbox_50k_v1.tgz).)
+
+Currently the `demo.py` script directly uses RGB Images from the SUN RGB-D val dataset and thus the 2D bbox detections can directly be downloaded and used. But incase we want to run the demo script on a custom RGB Image, we need the 2D bbox detection in the right format to run the demo script. 
+
+`fasterRCNN_detections.py` uses a pretrained Faster RCNN on Open Images V4 Dataset with 600 categories with ImageNet pre-trained Inception Resnet V2 as image feature extractor. The inference block added in the script makes sure that only objects of interest are detected and saved in a `.txt` file as required by ImvoteNet.
+
+Run:
+```bash
+python fasterRCNN_detections.py
+```
+Check `demo/FasterRCNN_labels` to get the corresponding text file which can inturn be used with the `demo.py` script. 
+
+#### Categories of interest from sun rgbd | possible category from the 600 categories of Open Images Dataset <br />
+bed         | Bed    <br /> 
+table       | Table <br />
+sofa        | Sofa bed <br />
+chair       | Chair <br />
+toilet      | Toilet <br />
+desk        | Desk <br />
+dresser     | Filing cabinet <br />
+night_stand | Nightstand <br />
+bookshelf   | Bookcase <br />
+bathtub     | Bathtub <br />
+
+## Fixes
+3. Error while compiling PointNet2 with newer/higher CUDA version (like CUDA>=11.0) <br />
+   FIX:
+   1. Change all instances of AT_CHECK to TORCH_CHECK inside all the source files inside `pointnet2/_ext_src/src and pointnet2/_ext_src/include`. This is due       to an API change in PyTorch.  
+   2. Change pointnet2/setup.py:
+      ```bash
+      # Copyright (c) Facebook, Inc. and its affiliates.
+      # 
+      # This source code is licensed under the MIT license found in the
+      # LICENSE file in the root directory of this source tree.
+
+      from setuptools import setup
+      from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+      import glob
+      import os
+
+      _ext_src_root = "_ext_src"
+      _ext_sources = glob.glob("{}/src/*.cpp".format(_ext_src_root)) + glob.glob(
+          "{}/src/*.cu".format(_ext_src_root)
+      )
+      _ext_headers = glob.glob("{}/include/*".format(_ext_src_root))
+
+      headers = "-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), '_ext_src', 'include')
+
+      setup(
+          name='pointnet2',
+          ext_modules=[
+              CUDAExtension(
+                  name='pointnet2._ext',
+                  sources=_ext_sources,
+                  extra_compile_args={
+                      "cxx": ["-O2", headers],
+                      "nvcc": ["-O2", headers]
+                  },
+              )
+          ],
+          cmdclass={
+              'build_ext': BuildExtension
+          }
+      )
+     ```
+
+2. Error message before training: ImportError: No module named 'google' <br />
+   FIX: Run <br />
+   ```bash
+   pip install --upgrade google-api-python-client
+   ```
+ 
+3. Error message: AttributeError: ‘Fraction’ object has no attribute ‘gcd’ <br />
+   FIX: <br />
+   A minor change is needed in the site-packages of your virtual environment. <br />
+   Open `path to env/lib/python_3.8/site-packages/networkx/algorithms/dag.py`<br />
+   Change `from fractions import gcd` to `import math` <br />
+   Change the one gcd instance in the file from `gcd()` to `math.gcd()` <br />
